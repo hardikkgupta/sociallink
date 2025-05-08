@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sociallink-recommender
+  labels:
+    app: sociallink-recommender
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sociallink-recommender
+  template:
+    metadata:
+      labels:
+        app: sociallink-recommender
+    spec:
+      containers:
+      - name: recommender
+        image: sociallink-recommender:latest
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+        env:
+        - name: MODEL_PATH
+          value: "/models/sociallink_model.pt"
+        - name: NUM_USERS
+          value: "10000000"
+        - name: NUM_ITEMS
+          value: "1000000"
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+      volumes:
+      - name: model-storage
+        persistentVolumeClaim:
+          claimName: model-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sociallink-recommender
+spec:
+  selector:
+    app: sociallink-recommender
+  ports:
+  - port: 80
+    targetPort: 8000
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sociallink-recommender-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sociallink-recommender
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80 
